@@ -1,0 +1,14 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+Diagnostics:
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - performance-*
+      - readability-*
+    Remove:
+      - readability-identifier-length
+      - readability-magic-numbers
+Index:
+  Background: Build

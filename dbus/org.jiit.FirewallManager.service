@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.jiit.FirewallManager
+SystemdService=jiit-firewall.service

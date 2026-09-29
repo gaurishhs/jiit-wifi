@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Firewall Daemon",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/jiit-firewall-daemon",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "CMake: Build (dev)"
+    },
+    {
+      "name": "Debug Settings App",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/jiit-firewall-settings",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "preLaunchTask": "CMake: Build (dev)"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=JIIT Firewall Manager background service
+After=network.target graphical-session.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/jiit-firewall-daemon
+Restart=on-failure
+RestartSec=4
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.config/jiit-firewall %h/.local/state/jiit-firewall
+
+[Install]
+WantedBy=default.target

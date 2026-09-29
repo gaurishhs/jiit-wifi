@@ -1,0 +1,21 @@
+# CMake build output
+/build/
+/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# IDE and editor state
+.cache/
+.ccls-cache/
+*.user
+*.swp
+*.swo
+
+# Generated files
+*.qm
+*.moc
+moc_*.cpp
+
+# OS metadata
+.DS_Store
+Thumbs.db

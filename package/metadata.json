@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "gaurishh.sethia@gmail.com",
+                "Name": "Gaurish Sethia"
+            }
+        ],
+        "Category": "Utilities",
+        "Description": "Manage JIIT Sophos login and Xray connectivity.",
+        "Icon": "wifi",
+        "Id": "com.gaurishhs.wifi",
+        "Name": "JIIT Firewall Manager",
+        "Version": "1.0.0",
+        "License": "MIT"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet"
+}

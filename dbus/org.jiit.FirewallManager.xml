@@ -1,0 +1,22 @@
+<node name="/org/jiit/FirewallManager">
+  <interface name="org.jiit.FirewallManager">
+    <method name="GetStatus"><arg direction="out" type="s"/></method>
+    <method name="GetAccounts"><arg direction="out" type="s"/></method>
+    <method name="GetLogs"><arg direction="out" type="s"/></method>
+    <method name="GetSettings"><arg direction="out" type="s"/></method>
+    <method name="SetSettings"><arg direction="in" type="s"/><arg direction="out" type="s"/></method>
+    <method name="SaveAccount"><arg direction="in" type="s"/><arg direction="out" type="s"/></method>
+    <method name="RemoveAccount"><arg direction="in" type="s"/><arg direction="out" type="s"/></method>
+    <method name="Login"><arg direction="out" type="s"/></method>
+    <method name="Logout"><arg direction="out" type="s"/></method>
+    <method name="Retry"><arg direction="out" type="s"/></method>
+    <method name="StartXray"><arg direction="out" type="s"/></method>
+    <method name="StopXray"><arg direction="out" type="s"/></method>
+    <method name="DetectCurrentNetwork"><arg direction="out" type="s"/></method>
+    <signal name="StatusChanged"><arg type="s"/></signal>
+    <signal name="LoginStateChanged"><arg type="s"/></signal>
+    <signal name="XrayStateChanged"><arg type="s"/></signal>
+    <signal name="NetworkStateChanged"><arg type="s"/></signal>
+    <signal name="LogMessage"><arg type="s"/></signal>
+  </interface>
+</node>

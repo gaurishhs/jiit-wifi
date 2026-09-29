@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: Configure (dev)",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--preset", "dev"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: Build (dev)",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev"],
+      "dependsOn": "CMake: Configure (dev)",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "CMake: Test (dev)",
+      "type": "shell",
+      "command": "ctest",
+      "args": ["--preset", "dev"],
+      "dependsOn": "CMake: Build (dev)",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
