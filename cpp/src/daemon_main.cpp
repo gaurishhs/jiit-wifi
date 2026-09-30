@@ -58,5 +58,9 @@ int main(int argc, char **argv) {
   system.connect("org.freedesktop.login1", "/org/freedesktop/login1",
                  "org.freedesktop.login1.Manager", "PrepareForSleep", &service,
                  SLOT(prepareForSleep(bool)));
+  bus.connect("org.kde.Solid.PowerManagement",
+              "/org/kde/Solid/PowerManagement/Actions/SuspendSession",
+              "org.kde.Solid.PowerManagement.Actions.SuspendSession",
+              "aboutToSuspend", &service, SLOT(prepareForPowerDevilSuspend()));
   return app.exec();
 }

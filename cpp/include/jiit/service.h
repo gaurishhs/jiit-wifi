@@ -20,11 +20,13 @@ public:
   QString removeAccount(const QString &id);
   QString login();
   QString logout();
+  QString logoutForNetworkDisconnect();
   QString retry();
   QString startXray();
   QString stopXray();
   QString detectCurrentNetwork() const;
 public slots:
+  void prepareForPowerDevilSuspend();
   void prepareForSleep(bool sleeping);
 signals:
   void statusChanged(const QString &json);
@@ -48,6 +50,7 @@ private:
   void acquireSleepInhibitor();
   void releaseSleepInhibitor();
   void finishSleepPreparation();
+  void beginResumeRefresh();
   Settings m_settings;
   NetworkMonitor m_network;
   SophosClient m_sophos;
@@ -58,8 +61,11 @@ private:
   int m_accountIndex{0}, m_portalAttempts{0};
   bool m_portalReachable{false}, m_authenticated{false}, m_ownsXray{false},
       m_busy{false}, m_sleeping{false}, m_manualLogout{false},
-      m_loggingOut{false};
-  QString m_accountId, m_accountName, m_accountUser, m_xrayStatus{"Unknown"};
+      m_loggingOut{false}, m_resumeReauthPending{false},
+      m_resumeReloginAfterLogout{false},
+      m_wasOnConfiguredNetworkBeforeSleep{false};
+  QString m_accountId, m_accountName, m_accountUser, m_resumeLogoutUser,
+      m_xrayStatus{"Unknown"};
   QDBusUnixFileDescriptor m_sleepDelayInhibitor;
   QTimer m_retryTimer, m_debounce, m_sleepLogoutDeadline;
 };

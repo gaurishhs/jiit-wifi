@@ -17,6 +17,7 @@ public slots:
   QString RemoveAccount(const QString &id);
   QString Login();
   QString Logout();
+  QString LogoutForNetworkDisconnect();
   QString Retry();
   QString StartXray();
   QString StopXray();

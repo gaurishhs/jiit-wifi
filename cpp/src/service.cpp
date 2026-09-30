@@ -130,7 +130,7 @@ QString FirewallService::setSettings(const QString &json) {
   else
     releaseSleepInhibitor();
   if (matches(m_snapshot, m_settings.networks) && !m_authenticated && !m_busy &&
-      !m_manualLogout)
+      !m_manualLogout && !m_resumeReauthPending)
     beginLogin();
   publish();
   return R"({"ok":true})";
@@ -176,53 +176,59 @@ QString FirewallService::saveAccount(const QString &json) {
   if (!password.isEmpty()) {
     QString walletError;
     if (!m_wallet.write(id, password, &walletError))
-      return QString::fromUtf8(QJsonDocument(QJsonObject{
-          {"ok", false},
-          {"message", walletError.isEmpty() ? "Could not save password to KDE Wallet" : walletError}})
-                                     .toJson(QJsonDocument::Compact));
+      return QString::fromUtf8(
+          QJsonDocument(
+              QJsonObject{
+                  {"ok", false},
+                  {"message", walletError.isEmpty()
+                                  ? "Could not save password to KDE Wallet"
+                                  : walletError}})
+              .toJson(QJsonDocument::Compact));
   }
 
   QString saveError;
   if (!saveSettings(next, &saveError)) {
     if (isNew)
       m_wallet.remove(id);
-    return QString::fromUtf8(QJsonDocument(QJsonObject{
-        {"ok", false}, {"message", saveError}})
-                                 .toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"ok", false}, {"message", saveError}})
+            .toJson(QJsonDocument::Compact));
   }
   m_settings = next;
   publish();
-  if (matches(m_snapshot, m_settings.networks) && !m_authenticated &&
-      !m_busy && !m_manualLogout)
+  if (matches(m_snapshot, m_settings.networks) && !m_authenticated && !m_busy &&
+      !m_manualLogout && !m_resumeReauthPending)
     beginLogin();
-  return QString::fromUtf8(QJsonDocument(QJsonObject{
-      {"ok", true}, {"id", id}, {"message", "Account saved"}})
-                               .toJson(QJsonDocument::Compact));
+  return QString::fromUtf8(
+      QJsonDocument(
+          QJsonObject{{"ok", true}, {"id", id}, {"message", "Account saved"}})
+          .toJson(QJsonDocument::Compact));
 }
 QString FirewallService::removeAccount(const QString &id) {
   Settings next = m_settings;
-  const auto it = std::find_if(next.accounts.begin(), next.accounts.end(),
-                               [&id](const Account &account) {
-                                 return account.id == id;
-                               });
+  const auto it =
+      std::find_if(next.accounts.begin(), next.accounts.end(),
+                   [&id](const Account &account) { return account.id == id; });
   if (it == next.accounts.end())
     return R"({"ok":false,"message":"Account not found"})";
   next.accounts.erase(it);
   QString saveError;
   if (!saveSettings(next, &saveError))
-    return QString::fromUtf8(QJsonDocument(QJsonObject{
-        {"ok", false}, {"message", saveError}})
-                                 .toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"ok", false}, {"message", saveError}})
+            .toJson(QJsonDocument::Compact));
   m_settings = next;
   QString walletError;
   m_wallet.remove(id, &walletError);
   publish();
-  return QString::fromUtf8(QJsonDocument(QJsonObject{
-      {"ok", true},
-      {"message", walletError.isEmpty()
-                      ? "Account removed"
-                      : "Account removed; KDE Wallet could not delete its saved password"}})
-                               .toJson(QJsonDocument::Compact));
+  return QString::fromUtf8(
+      QJsonDocument(
+          QJsonObject{{"ok", true},
+                      {"message", walletError.isEmpty()
+                                      ? "Account removed"
+                                      : "Account removed; KDE Wallet could not "
+                                        "delete its saved password"}})
+          .toJson(QJsonDocument::Compact));
 }
 QString FirewallService::login() {
   m_manualLogout = false;
@@ -252,6 +258,13 @@ QString FirewallService::logout() {
     setState(State::Disconnected);
   }
   return R"({"ok":true,"message":"Logout workflow started"})";
+}
+QString FirewallService::logoutForNetworkDisconnect() {
+  if (!m_busy && m_authenticated) {
+    m_sophos.setTimeout(qMin(3, m_settings.timeoutSeconds));
+    m_sophos.setRetries(0);
+  }
+  return logout();
 }
 QString FirewallService::retry() { return login(); }
 QString FirewallService::startXray() {
@@ -296,8 +309,16 @@ void FirewallService::networkChanged(const NetworkSnapshot &n) {
   emit networkStateChanged(QString::fromUtf8(
       QJsonDocument(status()).toJson(QJsonDocument::Compact)));
   publish();
+  if (!valid && m_resumeReauthPending && !m_resumeReloginAfterLogout) {
+    m_busy = false;
+    m_retryTimer.stop();
+  }
   if (valid) {
     m_debounce.stop();
+    if (m_resumeReauthPending) {
+      beginResumeRefresh();
+      return;
+    }
     if (!oldValid && !m_authenticated && !m_busy && !m_manualLogout &&
         !m_sleeping)
       beginLogin();
@@ -359,6 +380,25 @@ void FirewallService::portalChecked(bool reachable) {
     }
     return;
   }
+  if (m_resumeReauthPending) {
+    if (m_resumeLogoutUser.isEmpty()) {
+      const auto accounts = orderedAccounts(m_settings.accounts);
+      if (!accounts.isEmpty())
+        m_resumeLogoutUser = accounts.front().username;
+    }
+    if (m_resumeLogoutUser.isEmpty()) {
+      m_resumeReauthPending = false;
+      m_busy = false;
+      beginLogin();
+      return;
+    }
+    m_busy = true;
+    m_loggingOut = true;
+    m_resumeReloginAfterLogout = true;
+    setState(State::LoggingOut);
+    m_sophos.logout(m_resumeLogoutUser);
+    return;
+  }
   m_accountIndex = 0;
   setState(State::Authenticating);
   notifyUser("JIIT sign in", "Authenticating with the Sophos portal.");
@@ -392,18 +432,26 @@ void FirewallService::tryNextAccount() {
 void FirewallService::sophosCompleted(const SophosResult &r) {
   qInfo().noquote() << "Sophos response" << resultName(r.code) << r.message;
   if (m_loggingOut) {
+    const bool reloginAfterLogout = m_resumeReloginAfterLogout;
     m_authenticated = false;
     m_accountId.clear();
     m_accountName.clear();
     m_accountUser.clear();
     m_busy = false;
     m_loggingOut = false;
+    m_resumeReloginAfterLogout = false;
     m_sophos.setTimeout(m_settings.timeoutSeconds);
     m_sophos.setRetries(m_settings.retryCount);
     m_sleepLogoutDeadline.stop();
     setState(m_sleeping ? State::Sleeping : State::Disconnected);
     if (m_sleeping)
       releaseSleepInhibitor();
+    if (reloginAfterLogout) {
+      m_resumeReauthPending = false;
+      m_resumeLogoutUser.clear();
+      if (matches(m_snapshot, m_settings.networks))
+        beginLogin();
+    }
     return;
   }
   if (m_sleeping || !matches(m_snapshot, m_settings.networks)) {
@@ -474,9 +522,32 @@ void FirewallService::xrayOperation(const QString &action, bool ok,
   }
   publish();
 }
+void FirewallService::prepareForPowerDevilSuspend() {
+  qInfo() << "PowerDevil signaled suspend preparation";
+  prepareForSleep(true);
+}
+
+void FirewallService::beginResumeRefresh() {
+  if (!m_resumeReauthPending || m_sleeping || m_busy ||
+      !matches(m_snapshot, m_settings.networks))
+    return;
+  m_busy = true;
+  setState(State::WaitingForPortal);
+  if (m_settings.xrayEnabled)
+    m_xray.query();
+  else
+    m_sophos.checkPortal();
+}
+
 void FirewallService::prepareForSleep(bool sleeping) {
-  m_sleeping = sleeping;
+  if (sleeping == m_sleeping)
+    return;
   if (sleeping) {
+    m_sleeping = true;
+    m_wasOnConfiguredNetworkBeforeSleep =
+        matches(m_snapshot, m_settings.networks);
+    if (!m_accountUser.isEmpty())
+      m_resumeLogoutUser = m_accountUser;
     m_retryTimer.stop();
     if (m_settings.logoutBeforeSleep && (m_authenticated || m_busy)) {
       acquireSleepInhibitor();
@@ -485,6 +556,8 @@ void FirewallService::prepareForSleep(bool sleeping) {
       m_sophos.setRetries(0);
     }
     if (m_settings.logoutBeforeSleep && m_authenticated) {
+      if (m_loggingOut)
+        return;
       m_busy = true;
       m_loggingOut = true;
       setState(State::LoggingOut);
@@ -501,16 +574,17 @@ void FirewallService::prepareForSleep(bool sleeping) {
       finishSleepPreparation();
   } else {
     m_sleeping = false;
+    m_manualLogout = false;
     m_sleepLogoutDeadline.stop();
     releaseSleepInhibitor();
     m_sophos.setTimeout(m_settings.timeoutSeconds);
     m_sophos.setRetries(m_settings.retryCount);
     acquireSleepInhibitor();
-    if (m_settings.autoLoginAfterWake)
-      QTimer::singleShot(8000, this, [this] {
-        if (matches(m_snapshot, m_settings.networks))
-          beginLogin();
-      });
+    m_resumeReauthPending =
+        m_settings.autoLoginAfterWake && m_wasOnConfiguredNetworkBeforeSleep;
+    m_wasOnConfiguredNetworkBeforeSleep = false;
+    if (m_resumeReauthPending)
+      beginResumeRefresh();
   }
 }
 void FirewallService::acquireSleepInhibitor() {
@@ -524,9 +598,9 @@ void FirewallService::acquireSleepInhibitor() {
                << login1.lastError().message();
     return;
   }
-  const QDBusReply<QDBusUnixFileDescriptor> reply = login1.call(
-      "Inhibit", "sleep", "JIIT Firewall Manager",
-      "Log out from the JIIT Sophos portal before sleep", "delay");
+  const QDBusReply<QDBusUnixFileDescriptor> reply =
+      login1.call("Inhibit", "sleep", "JIIT Firewall Manager",
+                  "Log out from the JIIT Sophos portal before sleep", "delay");
   if (!reply.isValid() || !reply.value().isValid()) {
     qWarning() << "Could not acquire logind sleep delay inhibitor"
                << reply.error().message();

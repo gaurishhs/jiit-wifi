@@ -35,6 +35,9 @@ QString FirewallAdaptor::RemoveAccount(const QString &id) {
 }
 QString FirewallAdaptor::Login() { return m_service->login(); }
 QString FirewallAdaptor::Logout() { return m_service->logout(); }
+QString FirewallAdaptor::LogoutForNetworkDisconnect() {
+  return m_service->logoutForNetworkDisconnect();
+}
 QString FirewallAdaptor::Retry() { return m_service->retry(); }
 QString FirewallAdaptor::StartXray() { return m_service->startXray(); }
 QString FirewallAdaptor::StopXray() { return m_service->stopXray(); }

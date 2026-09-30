@@ -1,0 +1,60 @@
+#!/bin/bash
+# Log out of the Sophos portal while NetworkManager still has the link up.
+# NetworkManager waits for pre-down hooks to exit before disconnecting.
+
+set -u
+
+iface=${1:-}
+action=${2:-}
+[[ "$action" == "pre-down" && -n "$iface" ]] || exit 0
+
+service=org.jiit.FirewallManager
+object=/org/jiit/FirewallManager
+interface=org.jiit.FirewallManager
+
+for bus in /run/user/[0-9]*/bus; do
+  [[ -S "$bus" ]] || continue
+  runtime=${bus%/bus}
+  uid=${runtime##*/}
+  username=$(getent passwd "$uid" | cut -d: -f1)
+  [[ -n "$username" ]] || continue
+
+  call_user_bus() {
+    runuser -u "$username" -- env \
+      XDG_RUNTIME_DIR="$runtime" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" \
+      busctl --user call "$service" "$object" "$interface" "$@" 2>/dev/null
+  }
+
+  status_reply=$(call_user_bus GetStatus) || continue
+  status_json=$(sed 's/^s //' <<<"$status_reply" | jq -r 'fromjson' 2>/dev/null) || continue
+  [[ $(jq -r '.network.interface // ""' <<<"$status_json") == "$iface" ]] || continue
+  [[ $(jq -r '.profile // ""' <<<"$status_json") != "" ]] || continue
+  [[ $(jq -r '.authenticated // false' <<<"$status_json") == "true" ]] || exit 0
+
+  state=$(jq -r '.state // ""' <<<"$status_json")
+  if [[ "$state" != "LOGGING_OUT" ]]; then
+    call_user_bus LogoutForNetworkDisconnect >/dev/null || true
+  fi
+
+  # The daemon caps this logout request at three seconds. Allow a little time
+  # for the Xray stop and for the daemon to publish completion.
+  for _ in {1..20}; do
+    sleep 0.2
+    status_reply=$(call_user_bus GetStatus) || continue
+    status_json=$(sed 's/^s //' <<<"$status_reply" | jq -r 'fromjson' 2>/dev/null) || continue
+    authenticated=$(jq -r '.authenticated // false' <<<"$status_json")
+    automation=$(jq -r '.automation // false' <<<"$status_json")
+    if [[ "$authenticated" == "false" && "$automation" == "false" ]]; then
+      logger -t jiit-firewall-pre-down -- \
+        "logout workflow completed before disconnect interface=$iface"
+      exit 0
+    fi
+  done
+
+  logger -t jiit-firewall-pre-down -- \
+    "logout still pending at pre-down deadline interface=$iface"
+  exit 0
+done
+
+exit 0

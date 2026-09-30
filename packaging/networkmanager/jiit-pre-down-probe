@@ -1,0 +1,10 @@
+#!/bin/sh
+# Temporary diagnostic hook: record NetworkManager pre-down events so we can
+# verify whether this machine invokes the synchronous event during suspend.
+
+action=${2:-unknown}
+iface=${1:-unknown}
+connection=${CONNECTION_ID:-unknown}
+
+logger -t jiit-pre-down-probe -- \
+  "action=${action} interface=${iface} connection=${connection}"
